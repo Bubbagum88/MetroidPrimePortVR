@@ -1,0 +1,57 @@
+name: quest1-apk
+
+# Builds the Quest APK for the Quest 1 on every push to quest1 (and by hand).
+on:
+  push:
+    branches: [quest1]
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+# Only the newest run per branch matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NDK_VERSION: 29.0.14206865
+      CMAKE_VERSION: 3.31.5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # The same SDK pieces upstream's android.yml installs, plus the SDK CMake
+      # (3.25+, with Ninja) that quest/local.properties points the build at.
+      - name: SDK, NDK, CMake and Rust target
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "platforms;android-36" "build-tools;34.0.0" > /dev/null
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin" >> "$GITHUB_PATH"
+          rustup target add aarch64-linux-android
+          printf 'sdk.dir=%s\ncmake.dir=%s\n' "$ANDROID_HOME" "$ANDROID_HOME/cmake/$CMAKE_VERSION" > quest/local.properties
+      # Stock Dawn (one pass per eye). The patched multiview Dawn needs
+      # quest/Build-QuestDawn.ps1 (Windows) and is left for later.
+      # Signed with the committed CI key, so every build installs over the last.
+      - name: Build
+        env:
+          PRIMEDGUN_QUEST_KEYSTORE: ${{ github.workspace }}/quest/ci-debug.keystore
+          PRIMEDGUN_QUEST_KEYSTORE_PASSWORD: android
+          PRIMEDGUN_QUEST_KEY_ALIAS: androiddebugkey
+          PRIMEDGUN_QUEST_KEY_PASSWORD: android
+        run: sh quest/gradlew --project-dir quest --console=plain app:assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: primedgun2-quest1-apk
+          path: quest/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
