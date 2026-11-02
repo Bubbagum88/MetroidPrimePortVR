@@ -5891,6 +5891,18 @@ fn fs_main(in: VertexOutput{9}) -> @location(0) vec4f {{{6}{5}
     const size_t at = find_anchor(shaderSource, guard);
     shaderSource.replace(at, guard.size(), "  return p[min(word_idx, arrayLength(p) - 1u)];\n");
   }
+  if (!gfx::g_vertexFetchTexture) {
+    // Quest 1 (Adreno 540): the driver sizes its buffer-length table from the storage buffers a
+    // shader queries but fills it for every bound one, and overruns it when a draw binds a buffer
+    // the shader never asked the length of. vs_main asks both, so the table covers both.
+    constexpr std::string_view vsTail = "\n    return out;\n}";
+    const size_t at = shaderSource.find(vsTail, find_anchor(shaderSource, "fn vs_main("));
+    assert(at != std::string::npos);
+    shaderSource.insert(at,
+                        "\n    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n"
+                        "        out.pos = vec4f(0.0);\n"
+                        "    }");
+  }
   add_cut_caster(shaderSource, config);
   if (config.drawId) {
     // The draw serial as the colour, 8 bits a channel, whatever the shading came to (it can still discard).
