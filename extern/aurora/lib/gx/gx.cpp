@@ -1079,19 +1079,19 @@ std::array<wgpu::BindGroup, 2> empty_texture_bind_groups(const std::array<wgpu::
   return groups;
 }
 
-// A GX pipeline layout: the frame's buffers, the uniform and `textures` as group 2 (none for the
-// shadow map pass, which samples nothing).
-wgpu::PipelineLayout make_pipeline_layout(const wgpu::BindGroupLayout* textures, const char* label) {
-  std::array<wgpu::BindGroupLayout, 3> layouts{
+// A GX pipeline layout: the vertex buffer, the uniform, `textures` as group 2 and the storage
+// buffer as group 3. The shadow map pass samples nothing but still takes the full texture layout,
+// so group 3 has a group 2 below it and a cutout's pipeline (which uses it) shares the layout.
+wgpu::PipelineLayout make_pipeline_layout(const wgpu::BindGroupLayout& textures, const char* label) {
+  const std::array<wgpu::BindGroupLayout, 4> layouts{
       gfx::detail::resources().staticBindGroupLayout,
       gfx::detail::resources().uniformBindGroupLayout,
+      textures,
+      gfx::detail::resources().storageBindGroupLayout,
   };
-  if (textures != nullptr) {
-    layouts[2] = *textures;
-  }
   const wgpu::PipelineLayoutDescriptor desc{
       .label = label,
-      .bindGroupLayoutCount = textures != nullptr ? 3u : 2u,
+      .bindGroupLayoutCount = layouts.size(),
       .bindGroupLayouts = layouts.data(),
       .immediateSize = sizeof(DrawImmediateData),
   };
@@ -1257,10 +1257,10 @@ void initialize() noexcept {
     sEmptyTextureView = sEmptyTexture.CreateView();
   }
   g_emptyTextureBindGroups = empty_texture_bind_groups(empty_texture_entries(sEmptyTextureView), false);
-  sPipelineLayout = make_pipeline_layout(&sTextureBindGroupLayout, "GX Pipeline Layout");
-  sLeanPipelineLayout = make_pipeline_layout(&sLeanTextureBindGroupLayout, "GX Lean Pipeline Layout");
-  sShadowRecvPipelineLayout = make_pipeline_layout(&sShadowTextureBindGroupLayout, "GX Shadow Receiver Pipeline Layout");
-  sShadowPipelineLayout = make_pipeline_layout(nullptr, "GX Shadow Map Pipeline Layout");
+  sPipelineLayout = make_pipeline_layout(sTextureBindGroupLayout, "GX Pipeline Layout");
+  sLeanPipelineLayout = make_pipeline_layout(sLeanTextureBindGroupLayout, "GX Lean Pipeline Layout");
+  sShadowRecvPipelineLayout = make_pipeline_layout(sShadowTextureBindGroupLayout, "GX Shadow Receiver Pipeline Layout");
+  sShadowPipelineLayout = make_pipeline_layout(sTextureBindGroupLayout, "GX Shadow Map Pipeline Layout");
   if (sMultiviewTextureBindGroupLayout) {
     const wgpu::TextureViewDescriptor arrayViewDescriptor{
         .label = "Empty texture array view",
@@ -1268,10 +1268,10 @@ void initialize() noexcept {
     };
     sEmptyArrayTextureView = sEmptyTexture.CreateView(&arrayViewDescriptor);
     g_emptyMultiviewTextureBindGroups = empty_texture_bind_groups(empty_texture_entries(sEmptyArrayTextureView), true);
-    sMultiviewPipelineLayout = make_pipeline_layout(&sMultiviewTextureBindGroupLayout, "GX Multiview Pipeline Layout");
+    sMultiviewPipelineLayout = make_pipeline_layout(sMultiviewTextureBindGroupLayout, "GX Multiview Pipeline Layout");
     sMultiviewLeanPipelineLayout =
-        make_pipeline_layout(&sMultiviewLeanTextureBindGroupLayout, "GX Multiview Lean Pipeline Layout");
-    sMultiviewShadowRecvPipelineLayout = make_pipeline_layout(&sMultiviewShadowTextureBindGroupLayout,
+        make_pipeline_layout(sMultiviewLeanTextureBindGroupLayout, "GX Multiview Lean Pipeline Layout");
+    sMultiviewShadowRecvPipelineLayout = make_pipeline_layout(sMultiviewShadowTextureBindGroupLayout,
                                                               "GX Multiview Shadow Receiver Pipeline Layout");
   }
 }

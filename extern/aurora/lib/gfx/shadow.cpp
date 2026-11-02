@@ -166,6 +166,9 @@ void encode(const EncoderTaskContext&, const wgpu::CommandEncoder& cmd, const vo
     };
     const auto pass = cmd.BeginRenderPass(&passDescriptor);
     pass.SetBindGroup(0, resources.staticBindGroup);
+    // A caster without textures leaves the full layout's empty group in place.
+    pass.SetBindGroup(2, gx::g_emptyTextureBindGroups[static_cast<size_t>(gx::TextureLayout::Full)]);
+    pass.SetBindGroup(3, resources.storageBindGroup);
     int geometry = -1;
     bool nativeBound = false;
     for (const auto& draw : casters) {

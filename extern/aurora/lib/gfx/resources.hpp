@@ -162,6 +162,9 @@ struct Resources {
   wgpu::TextureView storageFetchTextureView;
   wgpu::BindGroupLayout staticBindGroupLayout;
   wgpu::BindGroup staticBindGroup;
+  // The storage data (the shaders' abuf), alone in GX group 3.
+  wgpu::BindGroupLayout storageBindGroupLayout;
+  wgpu::BindGroup storageBindGroup;
   wgpu::BindGroupLayout uniformBindGroupLayout;
   wgpu::BindGroup uniformBindGroup;
   // The multiview stereo replay's (stereo_multiview.hpp): two GX uniforms wide, an

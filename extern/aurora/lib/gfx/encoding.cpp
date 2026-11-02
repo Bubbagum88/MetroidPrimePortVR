@@ -81,9 +81,10 @@ void bind_empty_textures(const wgpu::RenderPassEncoder& pass, gx::TextureLayout 
   g_currentTexturesLayout = static_cast<int8_t>(index);
 }
 
-// A pass's group 0 at its start: the frame's buffers.
+// A pass's groups 0 and 3 at its start: the frame's buffers. Nothing else binds group 3.
 void bind_frame_geometry(const wgpu::RenderPassEncoder& pass) {
   pass.SetBindGroup(0, resources().staticBindGroup);
+  pass.SetBindGroup(3, resources().storageBindGroup);
   g_currentGeometry = 0;
 }
 

@@ -49,7 +49,8 @@ constexpr int PipelineCacheSchema = 1;
 // 1: the 2026-10-08 upstream merge moved the fork's ShaderConfig fields into upstream's spare bytes.
 // 2: the 2026-10-10 upstream merge (ecf519cf) stopped world draws from setting hudSample.
 // 3: upstream 0.35 claims the old spare bytes; VR flags extend ShaderConfig by four bytes.
-constexpr int PortGxLayoutEpoch = 3;
+// 4: the storage data (abuf) moved to its own bind group, group 3 (Quest 1 driver).
+constexpr int PortGxLayoutEpoch = 4;
 constexpr const char* InitialPipelineCacheName = "initial_pipeline_cache.db";
 // The name the seed VFS maps to AuroraConfig::pipelineCacheSeedData instead of a file.
 constexpr const char* EmbeddedSeedName = ":embedded-initial-pipeline-cache:";

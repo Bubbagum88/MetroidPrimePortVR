@@ -146,16 +146,11 @@ void create_fetch_texture(StagingKind kind, uint64_t bytes) {
 }
 
 void create_static_bind_group() {
-  std::array<wgpu::BindGroupEntry, 2> entries{};
-  for (size_t i = 0; i < entries.size(); ++i) {
-    entries[i].binding = static_cast<uint32_t>(i);
-  }
+  std::array<wgpu::BindGroupEntry, 1> entries{};
   if (g_vertexFetchTexture) {
     entries[0].textureView = g_resources.vertexFetchTextureView;
-    entries[1].textureView = g_resources.storageFetchTextureView;
   } else {
     entries[0].buffer = g_resources.vertexBuffer;
-    entries[1].buffer = g_resources.storageBuffer;
   }
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .label = "Static bind group",
@@ -164,6 +159,22 @@ void create_static_bind_group() {
       .entries = entries.data(),
   };
   g_resources.staticBindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
+}
+
+void create_storage_bind_group() {
+  std::array<wgpu::BindGroupEntry, 1> entries{};
+  if (g_vertexFetchTexture) {
+    entries[0].textureView = g_resources.storageFetchTextureView;
+  } else {
+    entries[0].buffer = g_resources.storageBuffer;
+  }
+  const wgpu::BindGroupDescriptor bindGroupDescriptor{
+      .label = "Storage bind group",
+      .layout = g_resources.storageBindGroupLayout,
+      .entryCount = entries.size(),
+      .entries = entries.data(),
+  };
+  g_resources.storageBindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
 }
 
 void create_uniform_bind_group() {
@@ -861,9 +872,8 @@ void initialize() {
       }
       return entry;
     };
-    // Vertex data, then storage data.
-    const std::array layoutEntries{makeEntry(0, wgpu::ShaderStage::Vertex),
-                                   makeEntry(1, wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment)};
+    // Vertex data in group 0; storage data alone in group 3 (see the abuf declaration in shader.cpp).
+    const std::array layoutEntries{makeEntry(0, wgpu::ShaderStage::Vertex)};
     const wgpu::BindGroupLayoutDescriptor layoutDesc{
         .label = "Static bind group layout",
         .entryCount = layoutEntries.size(),
@@ -871,6 +881,14 @@ void initialize() {
     };
     g_resources.staticBindGroupLayout = g_device.CreateBindGroupLayout(&layoutDesc);
     create_static_bind_group();
+    const std::array storageEntries{makeEntry(0, wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment)};
+    const wgpu::BindGroupLayoutDescriptor storageLayoutDesc{
+        .label = "Storage bind group layout",
+        .entryCount = storageEntries.size(),
+        .entries = storageEntries.data(),
+    };
+    g_resources.storageBindGroupLayout = g_device.CreateBindGroupLayout(&storageLayoutDesc);
+    create_storage_bind_group();
   }
 
   {
@@ -959,6 +977,8 @@ void shutdown() {
   shutdown_recording();
   g_resources.staticBindGroup = {};
   g_resources.staticBindGroupLayout = {};
+  g_resources.storageBindGroup = {};
+  g_resources.storageBindGroupLayout = {};
   g_resources.uniformBindGroup = {};
   g_resources.multiviewUniformBindGroup = {};
   g_resources.uniformBindGroupLayout = {};
@@ -1056,8 +1076,10 @@ void grow_frame_buffer(StagingKind kind, uint64_t need, const wgpu::CommandEncod
     }
     if (kind == StagingKind::Uniform) {
       create_uniform_bind_group();
-    } else if (kind != StagingKind::Index) {
+    } else if (kind == StagingKind::Vertex) {
       create_static_bind_group();
+    } else if (kind == StagingKind::Storage) {
+      create_storage_bind_group();
     }
     // Cached bind groups that hold the old buffer are no longer looked up; drop them soon so
     // the old buffer goes too.
@@ -1173,6 +1195,7 @@ void reserve_held_frame_buffers() {
     }
     create_uniform_bind_group();
     create_static_bind_group();
+    create_storage_bind_group();
     // Cached bind groups that hold the old buffers are no longer looked up.
     expire_unused_bind_groups_soon();
   });

@@ -5857,10 +5857,12 @@ struct Uniform {{
 }};
 @group(0) @binding(0)
 var<storage, read> vbuf: array<u32>;
-@group(0) @binding(1)
-var<storage, read> abuf: array<u32>;
 @group(1) @binding(0)
 var<uniform> ubuf: Uniform;{1}
+// abuf sits alone in its own group: the Quest 1's Adreno 540 driver gives arrayLength right only
+// for the first storage buffer of a descriptor set (it read 0 for abuf at group 0 binding 1).
+@group(3) @binding(0)
+var<storage, read> abuf: array<u32>;
 
 struct VertexOutput {{
     // GX multipass draws need identical depth across lighting/TEV shader variants.

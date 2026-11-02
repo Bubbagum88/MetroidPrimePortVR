@@ -44,10 +44,6 @@ void initialize_geometry_buffer() {
           .binding = 0,
           .buffer = g_buffer,
       },
-      wgpu::BindGroupEntry{
-          .binding = 1,
-          .buffer = res.storageBuffer,
-      },
   };
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .label = "Geometry cache bind group",
