@@ -18,7 +18,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 300
     env:
       NDK_VERSION: 29.0.14206865
       CMAKE_VERSION: 3.31.5
@@ -40,8 +40,20 @@ jobs:
           echo "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin" >> "$GITHUB_PATH"
           rustup target add aarch64-linux-android
           printf 'sdk.dir=%s\ncmake.dir=%s\n' "$ANDROID_HOME" "$ANDROID_HOME/cmake/$CMAKE_VERSION" > quest/local.properties
-      # Stock Dawn (one pass per eye). The patched multiview Dawn needs
-      # quest/Build-QuestDawn.ps1 (Windows) and is left for later.
+      # PrimedGun's patched Dawn (multiview: one pass draws both eyes; direct presentation;
+      # fragment density maps), built by quest/build-quest-dawn.sh as Build-QuestDawn.ps1 does on
+      # Windows. Building it takes long, so the package is cached until its inputs change.
+      - name: Patched Dawn cache
+        id: dawn-cache
+        uses: actions/cache@v4
+        with:
+          path: build/qd/dawn-android-aarch64-primedgun.tar.gz
+          key: quest-dawn-${{ hashFiles('quest/build-quest-dawn.sh', 'quest/dawn/**', 'extern/aurora/include/aurora/dawn_vulkan_abi.h', 'extern/aurora/include/aurora/dawn_fdm_abi.h', 'extern/aurora/cmake/AuroraDependencyVersions.cmake') }}
+      - name: Patched Dawn
+        if: steps.dawn-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y ninja-build > /dev/null
+          bash quest/build-quest-dawn.sh build/qd
       # Signed with the committed CI key, so every build installs over the last.
       - name: Build
         env:
@@ -49,7 +61,7 @@ jobs:
           PRIMEDGUN_QUEST_KEYSTORE_PASSWORD: android
           PRIMEDGUN_QUEST_KEY_ALIAS: androiddebugkey
           PRIMEDGUN_QUEST_KEY_PASSWORD: android
-        run: sh quest/gradlew --project-dir quest --console=plain app:assembleRelease
+        run: sh quest/gradlew --project-dir quest --console=plain app:assembleRelease "-PquestDawnPackage=$GITHUB_WORKSPACE/build/qd/dawn-android-aarch64-primedgun.tar.gz"
       - uses: actions/upload-artifact@v4
         with:
           name: primedgun2-quest1-apk
