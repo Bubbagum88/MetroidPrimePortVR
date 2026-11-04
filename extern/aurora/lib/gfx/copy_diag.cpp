@@ -331,6 +331,40 @@ void run_shader_probe() noexcept {
     (void)kArrayPos;
     (void)kArithPos;
 
+    // Explicit layouts: an automatic one leaves out what a variant's shader doesn't use (the readouts never
+    // sample the texture), and a bind group with an entry its layout lacks aborts with validation skipped.
+    const auto stages = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+    const std::array layoutEntries{
+        wgpu::BindGroupLayoutEntry{
+            .binding = 0, .visibility = stages, .sampler = {.type = wgpu::SamplerBindingType::Filtering}},
+        wgpu::BindGroupLayoutEntry{
+            .binding = 1,
+            .visibility = stages,
+            .texture = {.sampleType = wgpu::TextureSampleType::Float, .viewDimension = wgpu::TextureViewDimension::e2D},
+        },
+        wgpu::BindGroupLayoutEntry{
+            .binding = 2,
+            .visibility = stages,
+            .buffer = {.type = wgpu::BufferBindingType::Uniform, .minBindingSize = sizeof(uniformData)},
+        },
+    };
+    std::array<wgpu::BindGroupLayout, 2> bindGroupLayouts; // [0] without the uniform, [1] with it
+    std::array<wgpu::PipelineLayout, 2> pipelineLayouts;
+    for (size_t withUniform = 0; withUniform < 2; ++withUniform) {
+      const wgpu::BindGroupLayoutDescriptor bglDesc{
+          .label = "Copy probe bind group layout",
+          .entryCount = withUniform ? 3u : 2u,
+          .entries = layoutEntries.data(),
+      };
+      bindGroupLayouts[withUniform] = device.CreateBindGroupLayout(&bglDesc);
+      const wgpu::PipelineLayoutDescriptor plDesc{
+          .label = "Copy probe pipeline layout",
+          .bindGroupLayoutCount = 1,
+          .bindGroupLayouts = &bindGroupLayouts[withUniform],
+      };
+      pipelineLayouts[withUniform] = device.CreatePipelineLayout(&plDesc);
+    }
+
     const wgpu::CommandEncoderDescriptor encDesc{.label = "Copy probe"};
     auto cmd = device.CreateCommandEncoder(&encDesc);
     struct Result {
@@ -353,6 +387,7 @@ void run_shader_probe() noexcept {
       };
       const wgpu::RenderPipelineDescriptor pipeDesc{
           .label = v.name,
+          .layout = pipelineLayouts[v.uniform ? 1 : 0],
           .vertex = wgpu::VertexState{.module = module, .entryPoint = "vs_main"},
           .primitive = wgpu::PrimitiveState{.topology = wgpu::PrimitiveTopology::TriangleList},
           .fragment = &fragment,
@@ -371,7 +406,7 @@ void run_shader_probe() noexcept {
         });
       }
       const wgpu::BindGroupDescriptor bgDesc{
-          .layout = pipeline.GetBindGroupLayout(0),
+          .layout = bindGroupLayouts[v.uniform ? 1 : 0],
           .entryCount = entries.size(),
           .entries = entries.data(),
       };
