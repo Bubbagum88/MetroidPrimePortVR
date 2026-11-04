@@ -147,6 +147,10 @@ struct StereoPassReplay {
   // under AURORA_STEREO_ROUTE_HEAD_LOCKED_2D (stereo_replay.hpp
   // HeadLockedPlane); empty, an eye copies the pass's own rectangle.
   std::array<Range, AURORA_STEREO_EYE_COUNT> copyUniformRanges{};
+  // copy_diag.hpp: the stereo route the pass's EFB copy was made under, and why no eye copy
+  // was taken from it (null when one was).
+  uint32_t diagCopyRoute = UINT32_MAX;
+  const char* diagNoEyeCopy = nullptr;
 };
 
 } // namespace detail

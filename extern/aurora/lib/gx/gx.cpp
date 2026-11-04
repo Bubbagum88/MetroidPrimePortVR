@@ -12,6 +12,7 @@
 #include "../gfx/recording.hpp"
 #include "../gfx/resource_cache.hpp"
 #include "../gfx/stereo_multiview.hpp"
+#include "../gfx/copy_diag.hpp"
 #include "../gfx/stereo_shadow.hpp"
 #include "../gfx/shadow.hpp"
 #include "../gfx/actor_shadow.hpp"
@@ -985,6 +986,35 @@ GXBindGroups build_bind_groups(const ShaderInfo& info) noexcept {
       .textureBindGroup =
           build_texture_bind_group(info, [](const gfx::TextureBind& tex) { return tex.ref->sampleTextureView.Get(); }),
   };
+}
+
+void diagnose_sampled_copies(const ShaderInfo& info, bool multiview) noexcept {
+  static constexpr Module DiagLog{"aurora::gfx::copy_diag"};
+  for (u32 i = 0; i < MaxTextures; ++i) {
+    const auto& tex = g_gxState.textures[i];
+    if (!tex || !(info.sampledTextures[i] || info.sampledIndTextures[i])) {
+      continue;
+    }
+    const char* label = tex.ref->label != nullptr ? tex.ref->label : "";
+    // GXCopyTex targets (dolphin/gx/GXFrameBuffer.cpp) and the VFX scene copy (gfx/vfx.cpp).
+    const bool copyLabel = std::strstr(label, "Resolved Texture") != nullptr || std::strstr(label, "Copy") != nullptr;
+    const int state = gfx::stereo_shadow::diag_state(tex.ref.get());
+    if (!copyLabel && state == 0) {
+      continue;
+    }
+    const uint8_t route = gfx::stereo_draw_route();
+    const std::string key = fmt::format("draw|{}|{}|{}|{}x{}|{}|{}|{}", route, i, label, tex.ref->size.width,
+                                        tex.ref->size.height, static_cast<uint32_t>(tex.ref->format), state, multiview);
+    if (gfx::copy_diag::occurrence(key) != 1) {
+      continue;
+    }
+    DiagLog.info("draw sampling a copy: route {}, slot {}{}, texture '{}' {}x{} wgpu format {} mips {}, eye copies {}, {}",
+                 gfx::copy_diag::route_name(route), i, info.sampledIndTextures[i] ? " (indirect)" : "", label,
+                 tex.ref->size.width, tex.ref->size.height, static_cast<uint32_t>(tex.ref->format), tex.ref->mipCount,
+                 state == 1 ? "valid (eyes sample their own)" : state == 2 ? "stale (eyes sample the mono copy)"
+                                                                         : "none (eyes sample the mono copy)",
+                 multiview ? "multiview" : "per eye");
+  }
 }
 
 std::array<gfx::BindGroupRef, 2> build_stereo_bind_groups(const ShaderInfo& info) noexcept {

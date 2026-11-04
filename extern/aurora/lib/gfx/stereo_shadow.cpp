@@ -53,7 +53,8 @@ TextureHandle make_like(const TextureRef& mono, EyeSize size) noexcept {
 EyeTextures make_layered_like(const TextureRef& mono, EyeSize size) noexcept {
   const wgpu::TextureDescriptor descriptor{
       .label = "Stereo eye copies (multiview)",
-      .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopyDst,
+      .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopyDst |
+               wgpu::TextureUsage::CopySrc,
       .dimension = wgpu::TextureDimension::e2D,
       .size = {size.width, size.height, 2},
       .format = mono.format,
@@ -215,6 +216,14 @@ WGPUTextureView layered_view(const TextureRef* mono) noexcept {
     return nullptr;
   }
   return entry->eyes[0]->arrayTextureView.Get();
+}
+
+int diag_state(const TextureRef* mono) noexcept {
+  const auto it = g_entries.find(mono);
+  if (it == g_entries.end() || it->second.mono.expired()) {
+    return 0;
+  }
+  return it->second.valid ? 1 : 2;
 }
 
 void shutdown() noexcept {

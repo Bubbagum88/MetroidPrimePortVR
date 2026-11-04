@@ -65,6 +65,10 @@ const TextureRef* eye_texture(const TextureRef* mono, uint32_t eye) noexcept;
 // null when it has none valid.
 WGPUTextureView layered_view(const TextureRef* mono) noexcept;
 
+// copy_diag.hpp: 0 when `mono` has no stand-ins, 1 when they are valid (the eyes sample them),
+// 2 when they are stale (the last copy into `mono` was taken without eye copies). Doesn't count as a use.
+int diag_state(const TextureRef* mono) noexcept;
+
 void shutdown() noexcept;
 
 } // namespace aurora::gfx::stereo_shadow

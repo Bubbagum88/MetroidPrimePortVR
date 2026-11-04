@@ -23,6 +23,7 @@
 #include "../gfx/hash.hpp"
 #include "../gfx/pipeline_cache.hpp"
 #include "../gfx/recording.hpp"
+#include "../gfx/copy_diag.hpp"
 #include "../gfx/stereo_shadow.hpp"
 #include "../internal.hpp"
 #include "dolphin/gd/GDGeometry.h"
@@ -1327,6 +1328,9 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u32 vtxCount, gfx::Rang
                     : build_stereo_bind_groups(cache.shaderInfo);
       cache.stereoEpoch = stereoEpoch;
       cache.stereoBindGroupsMultiview = multiview;
+      if (gfx::copy_diag::enabled()) {
+        diagnose_sampled_copies(cache.shaderInfo, multiview);
+      }
     }
   } else {
     cache.stereoBindGroups = {};

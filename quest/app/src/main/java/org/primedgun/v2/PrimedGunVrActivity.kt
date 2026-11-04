@@ -221,6 +221,9 @@ open class PrimedGunVrActivity : SDLActivity() {
                 // Dawn toggles for driver debugging (aurora gpu.cpp), e.g. MP_DAWN_DISABLE=skip_validation.
                 "MP_DAWN_ENABLE", "MP_DAWN_DISABLE",
                 // The GPU self-test (aurora gfx/selftest.cpp), run once 120 frames in: MP_GPU_SELFTEST=1.
-                "MP_GPU_SELFTEST")
+                "MP_GPU_SELFTEST",
+                // EFB copy diagnostics (aurora gfx/copy_diag.hpp): MP_COPY_DIAG=1 logs every kind of copy
+                // and reads its texels back; MP_EYE_COPIES=0 takes copies from the mono EFB only.
+                "MP_COPY_DIAG", "MP_EYE_COPIES")
     }
 }

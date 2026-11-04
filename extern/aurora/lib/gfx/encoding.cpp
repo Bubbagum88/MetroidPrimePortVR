@@ -5,6 +5,7 @@
 #include "geometry_buffer.hpp"
 
 #include "clear.hpp"
+#include "copy_diag.hpp"
 #include "depth_peek.hpp"
 #include "draw_payload.hpp"
 #include "stereo_multiview.hpp"
@@ -28,6 +29,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -210,6 +212,114 @@ bool stereo_multiview_pass_draws(const RenderPass& passInfo) {
     }
   }
   return false;
+}
+
+// copy_diag.hpp: how the eyes replay a pass's draws: GX draws, those without eye uniforms
+// (never drawn in the eyes), those whose mono, eye or multiview pipeline isn't built yet (skipped
+// this frame), and those that bind eye copies.
+struct EyeDrawCounts {
+  uint32_t draws = 0;
+  uint32_t noEyeUniform = 0;
+  uint32_t monoPipelineMissing = 0;
+  uint32_t eyePipelineMissing = 0;
+  uint32_t eyeTextures = 0;
+};
+
+EyeDrawCounts count_eye_draws(const RenderPass& passInfo, bool multiview) {
+  EyeDrawCounts counts;
+  for (const auto& cmd : passInfo.commands) {
+    if (cmd.type != CommandType::Draw || cmd.data.draw.kind != DrawKind::GX) {
+      continue;
+    }
+    const auto& data = inline_payload<gx::DrawData>(cmd.data.draw.payload.data());
+    ++counts.draws;
+    if (data.stereoUniformOffset[0] == UINT32_MAX) {
+      ++counts.noEyeUniform;
+    }
+    wgpu::RenderPipeline pipeline;
+    if (!get_pipeline(data.pipeline, pipeline) || !pipeline) {
+      ++counts.monoPipelineMissing;
+    }
+    const PipelineRef eyeRef = multiview || data.multiviewPipeline != PipelineRef{} ? data.multiviewPipeline : data.pipeline;
+    wgpu::RenderPipeline eyePipeline;
+    if (eyeRef == PipelineRef{} || !get_pipeline(eyeRef, eyePipeline) || !eyePipeline) {
+      ++counts.eyePipelineMissing;
+    }
+    if (data.stereoTextureBindGroup[0]) {
+      ++counts.eyeTextures;
+    }
+  }
+  return counts;
+}
+
+void diagnose_copy(wgpu::CommandEncoder& cmd, FramePacket& frame, const RenderPass& passInfo, uint32_t passIndex) {
+  const auto& target = passInfo.resolveTarget;
+  const auto& stereo = passInfo.stereo;
+  const bool eyeCopies = stereo.enabled && passInfo.probeFace < 0 && stereo.copyTargets[0];
+  const bool multiview = stereo.enabled && stereo.multiview && stereo_multiview_pass_draws(passInfo);
+  const auto& efb = passInfo.colorAttachments[SceneColorAttachmentIndex].size;
+  const std::string key = fmt::format("{}|{}|{}x{}|{}x{}|{}x{}|{}|{}", stereo.diagCopyRoute,
+                                      static_cast<int>(passInfo.resolveFormat), passInfo.resolveRect.width,
+                                      passInfo.resolveRect.height, target->size.width, target->size.height, efb.width,
+                                      efb.height, eyeCopies, multiview);
+  const uint32_t count = copy_diag::occurrence(key);
+  if (count == 0) {
+    return;
+  }
+  const std::string id = fmt::format("copy {:016x}", std::hash<std::string>{}(key));
+  if (count == 1) {
+    const auto draws = count_eye_draws(passInfo, multiview);
+    const bool needsConversion = tex_copy_conv::needs_conversion(passInfo.resolveFormat);
+    Log.info("{}: route {}, GX format {}, rect {},{} {}x{} of EFB {}x{}, mono target {}x{} wgpu format {} mips {}, "
+             "domain {}, mono path {}, pass {} ({}), stereo {}, eyes replayed {}",
+             id, copy_diag::route_name(stereo.diagCopyRoute), static_cast<int>(passInfo.resolveFormat),
+             passInfo.resolveRect.x, passInfo.resolveRect.y, passInfo.resolveRect.width, passInfo.resolveRect.height,
+             efb.width, efb.height, target->size.width, target->size.height, static_cast<uint32_t>(target->format),
+             target->mipCount, static_cast<int>(passInfo.resolveDomain), needsConversion ? "convert" : "blit/copy",
+             passIndex, passInfo.label, stereo.enabled ? "on" : "off",
+             !stereo.enabled ? "no" : stereo.skipMono ? "eyes only" : multiview ? "multiview" : "per eye");
+    Log.info("{}: pass draws {}: no eye uniform {}, mono pipeline not built {}, eye pipeline not built {}, "
+             "binding eye copies {}",
+             id, draws.draws, draws.noEyeUniform, draws.monoPipelineMissing, draws.eyePipelineMissing,
+             draws.eyeTextures);
+    if (eyeCopies) {
+      for (uint32_t eye = 0; eye < AURORA_STEREO_EYE_COUNT; ++eye) {
+        const auto& eyeTarget = stereo.copyTargets[eye];
+        const auto& eyePass = stereo.eyes[eye];
+        const auto& uniform = stereo.copyUniformRanges[eye];
+        Log.info("{}: eye {} copy: source {} ({}x{}, from {}), stand-in {} {}x{} wgpu format {}{}, uv {}", id, eye,
+                 eyePass.copy_view(gx::is_depth_format(passInfo.resolveFormat)) ? "present" : "MISSING",
+                 eyePass.size.width, eyePass.size.height,
+                 gx::is_depth_format(passInfo.resolveFormat) ? "depth"
+                 : eyePass.resolveView                       ? "resolve view"
+                 : eyePass.copySourceView                    ? "copy source view"
+                                                             : "color view",
+                 eyeTarget ? "present" : "MISSING", eyeTarget ? eyeTarget->size.width : 0,
+                 eyeTarget ? eyeTarget->size.height : 0, eyeTarget ? static_cast<uint32_t>(eyeTarget->format) : 0,
+                 eyeTarget && eyeTarget->arrayTextureView ? " (layer of the multiview pair)" : "",
+                 uniform.size != 0 ? "head-locked plane" : "the pass's rectangle");
+      }
+    } else {
+      Log.info("{}: no eye copies: {}", id, stereo.diagNoEyeCopy ? stereo.diagNoEyeCopy : "not set up");
+    }
+  }
+  if (!copy_diag::readback_due(count) || gx::is_depth_format(passInfo.resolveFormat)) {
+    return;
+  }
+  const std::string when = fmt::format("{} (seen {}x)", id, count);
+  copy_diag::readback(cmd, frame.afterSubmitCallbacks, target->texture, target->size, 0, when + " mono");
+  if (eyeCopies) {
+    for (uint32_t eye = 0; eye < AURORA_STEREO_EYE_COUNT; ++eye) {
+      const auto& eyeTarget = stereo.copyTargets[eye];
+      if (!eyeTarget) {
+        continue;
+      }
+      // A multiview stand-in is a layer of one two-layer texture (stereo_shadow.cpp make_layered_like).
+      const uint32_t layer = eyeTarget->arrayTextureView ? eye : 0;
+      copy_diag::readback(cmd, frame.afterSubmitCallbacks, eyeTarget->texture, eyeTarget->size, layer,
+                          fmt::format("{} eye {}", when, eye));
+    }
+  }
 }
 
 // One eye's render pass over the same attachments semantics as the mono pass
@@ -700,6 +810,10 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
         tex_copy_conv::blit(cmd, eyeReq);
       }
     }
+  }
+
+  if (copy_diag::enabled() && passInfo.resolveTarget && passInfo.probeFace < 0) {
+    diagnose_copy(cmd, frame, passInfo, passIndex);
   }
 
   if (passInfo.snapshotColorDst) {

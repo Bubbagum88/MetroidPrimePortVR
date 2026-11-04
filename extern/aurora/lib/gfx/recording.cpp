@@ -19,6 +19,7 @@
 #include "depth_peek.hpp"
 #include "pipeline_cache.hpp"
 #include "stereo_eyes.hpp"
+#include "copy_diag.hpp"
 #include "stereo_shadow.hpp"
 #include "stereo_uniform.hpp"
 #include "render_worker.hpp"
@@ -1723,12 +1724,15 @@ void resolve_pass_into(TextureHandle texture, ClipRect rect, bool clearColor, bo
     prevPass.stereo.monoOnly = true;
   }
   stereo_seal_pass(current_frame_packet(), g_recorder.currentRenderPass);
+  prevPass.stereo.diagCopyRoute = g_recorder.stereoRoute;
   if (probeFace < 0) {
     // VR MERGE NOTE: keep depth copies eligible alongside colour copies.
     // Upstream can change an effect's GXCopyTex format without touching this
     // code: retail lava/fog changed A8 -> Z16 in 0.32 and silently became mono
     // when depth was excluded here. See RetailFogDepthCopiesHaveSeparateEyeTargets.
-    if (prevPass.stereo.enabled && !monoCopy) {
+    // MP_EYE_COPIES=0 (copy_diag.hpp): every copy from the mono EFB only, as for a SKIP copy.
+    const bool eyeCopiesOff = copy_diag::eye_copies_off();
+    if (prevPass.stereo.enabled && !monoCopy && !eyeCopiesOff) {
       // Each eye's copy at that eye's resolution (stereo_shadow.hpp).
       const auto& efbSize = prevPass.colorAttachments[SceneColorAttachmentIndex].size;
       std::array<stereo_shadow::EyeSize, AURORA_STEREO_EYE_COUNT> eyeTargets{};
@@ -1759,6 +1763,9 @@ void resolve_pass_into(TextureHandle texture, ClipRect rect, bool clearColor, bo
         }
       }
     } else {
+      prevPass.stereo.diagNoEyeCopy = !prevPass.stereo.enabled ? "pass not replayed per eye"
+                                      : monoCopy              ? "SKIP route (mono copy)"
+                                                              : "MP_EYE_COPIES=0";
       stereo_shadow::invalidate(prevPass.resolveTarget.get());
     }
   }
