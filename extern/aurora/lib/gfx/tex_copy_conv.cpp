@@ -557,12 +557,12 @@ static wgpu::BindGroupLayout hdr_bind_group_layout() {
         wgpu::BindGroupLayoutEntry{
             .binding = 2,
             .visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
-            .buffer = wgpu::BufferBindingLayout{.type = wgpu::BufferBindingType::Uniform},
+            .buffer = wgpu::BufferBindingLayout{.type = wgpu::BufferBindingType::Uniform, .hasDynamicOffset = true},
         },
         wgpu::BindGroupLayoutEntry{
             .binding = 3,
             .visibility = wgpu::ShaderStage::Fragment,
-            .buffer = wgpu::BufferBindingLayout{.type = wgpu::BufferBindingType::Uniform},
+            .buffer = wgpu::BufferBindingLayout{.type = wgpu::BufferBindingType::Uniform, .hasDynamicOffset = true},
         },
     };
     static constexpr wgpu::BindGroupLayoutDescriptor descriptor{
@@ -659,6 +659,7 @@ void initialize() {
           .buffer =
               wgpu::BufferBindingLayout{
                   .type = wgpu::BufferBindingType::Uniform,
+                  .hasDynamicOffset = true,
               },
       },
   };
@@ -685,6 +686,7 @@ void initialize() {
           .buffer =
               wgpu::BufferBindingLayout{
                   .type = wgpu::BufferBindingType::Uniform,
+                  .hasDynamicOffset = true,
               },
       },
       // Compatibility only: depth is read through a comparison sampler (see CompatDepthLoad)
@@ -801,6 +803,12 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
   if (!pipeline) {
     return;
   }
+  // The uniforms are bound at dynamic offsets into the shared uniform buffer, as every GX, RmlUi, water
+  // and particle draw binds its own. These copies were its only reader through a static offset, and on
+  // the Quest 1 every one of them came out as one colour. In binding order: the UV transform, then
+  // (HdrDisplay) the tone curve.
+  std::array<uint32_t, 2> dynamicOffsets{req.uniformRange.offset, 0};
+  uint32_t dynamicOffsetCount = 1;
   wgpu::BindGroup bindGroup;
   if (gx::is_depth_format(req.fmt)) {
     const std::array bindGroupEntries{
@@ -811,7 +819,6 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
         wgpu::BindGroupEntry{
             .binding = 1,
             .buffer = detail::resources().uniformBuffer,
-            .offset = req.uniformRange.offset,
             .size = req.uniformRange.size,
         },
         wgpu::BindGroupEntry{
@@ -839,16 +846,16 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
         wgpu::BindGroupEntry{
             .binding = 2,
             .buffer = detail::resources().uniformBuffer,
-            .offset = req.uniformRange.offset,
             .size = req.uniformRange.size,
         },
         wgpu::BindGroupEntry{
             .binding = 3,
             .buffer = detail::resources().uniformBuffer,
-            .offset = req.toneRange.offset,
             .size = req.toneRange.size,
         },
     };
+    dynamicOffsets[1] = req.toneRange.offset;
+    dynamicOffsetCount = 2;
     const wgpu::BindGroupDescriptor bindGroupDescriptor{
         .layout = hdr_bind_group_layout(),
         .entryCount = bindGroupEntries.size(),
@@ -869,7 +876,6 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
         wgpu::BindGroupEntry{
             .binding = 2,
             .buffer = detail::resources().uniformBuffer,
-            .offset = req.uniformRange.offset,
             .size = req.uniformRange.size,
         },
     };
@@ -897,7 +903,7 @@ static void execute(const wgpu::CommandEncoder& cmd, const ConvRequest& req, con
   };
   const auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
   pass.SetPipeline(pipeline);
-  pass.SetBindGroup(0, bindGroup);
+  pass.SetBindGroup(0, bindGroup, dynamicOffsetCount, dynamicOffsets.data());
   pass.Draw(3);
   pass.End();
 }
