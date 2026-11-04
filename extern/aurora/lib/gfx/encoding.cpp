@@ -262,6 +262,7 @@ void diagnose_copy(wgpu::CommandEncoder& cmd, FramePacket& frame, const RenderPa
                                       static_cast<int>(passInfo.resolveFormat), passInfo.resolveRect.width,
                                       passInfo.resolveRect.height, target->size.width, target->size.height, efb.width,
                                       efb.height, eyeCopies, multiview);
+  copy_diag::run_shader_probe();
   const uint32_t count = copy_diag::occurrence(key);
   if (count == 0) {
     return;
@@ -308,6 +309,17 @@ void diagnose_copy(wgpu::CommandEncoder& cmd, FramePacket& frame, const RenderPa
   }
   const std::string when = fmt::format("{} (seen {}x)", id, count);
   copy_diag::readback(cmd, frame.afterSubmitCallbacks, target->texture, target->size, 0, when + " mono");
+  if (count == 1) {
+    copy_diag::readback_uniform(cmd, frame.afterSubmitCallbacks, resources().uniformBuffer,
+                                passInfo.resolveUniformRange.offset, passInfo.resolveUniformRange.size, when + " mono");
+    for (uint32_t eye = 0; eye < AURORA_STEREO_EYE_COUNT && eyeCopies; ++eye) {
+      const auto& range = stereo.copyUniformRanges[eye];
+      if (range.size != 0) {
+        copy_diag::readback_uniform(cmd, frame.afterSubmitCallbacks, resources().uniformBuffer, range.offset,
+                                    range.size, fmt::format("{} eye {}", when, eye));
+      }
+    }
+  }
   if (eyeCopies) {
     for (uint32_t eye = 0; eye < AURORA_STEREO_EYE_COUNT; ++eye) {
       const auto& eyeTarget = stereo.copyTargets[eye];

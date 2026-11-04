@@ -35,3 +35,17 @@ void readback(const wgpu::CommandEncoder& cmd, std::vector<AfterSubmitCallback>&
               const wgpu::Texture& texture, wgpu::Extent3D size, uint32_t layer, std::string label) noexcept;
 
 } // namespace aurora::gfx::copy_diag
+
+namespace aurora::gfx::copy_diag {
+// Once per run (MP_COPY_DIAG=1): draws an 8x8 test pattern through small copy shaders built like
+// tex_copy_conv's (a fullscreen triangle from private arrays, the UV transform from a uniform) and
+// variants of them, reads every result back and logs which reproduce the source. It isolates why
+// every shader copy (blit and convert) comes out as one colour on the Quest 1 while plain texture
+// copies don't: the uniform read (in the vertex or the fragment stage, from a small buffer or deep
+// in a large one) or the vertex-indexed private arrays.
+void run_shader_probe() noexcept;
+// Reads back the copy's UV transform (tex_copy_conv::Uniforms: offset, scale, opaque alpha) from
+// `buffer` at `offset` as the copy's pass is encoded, and logs it after `label`.
+void readback_uniform(const wgpu::CommandEncoder& cmd, std::vector<AfterSubmitCallback>& afterSubmit,
+                      const wgpu::Buffer& buffer, uint64_t offset, uint64_t size, std::string label) noexcept;
+} // namespace aurora::gfx::copy_diag
