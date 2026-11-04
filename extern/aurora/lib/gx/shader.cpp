@@ -3988,6 +3988,10 @@ void add_cut_caster(std::string& source, const ShaderConfig& config) {
         "\n    out.pos = shadow_pos;";
   vs += vsTail;
   std::string fs = "@fragment\nfn fs_shadow(in: VertexOutput) {";
+  if (!gfx::g_vertexFetchTexture) {
+    // Quest 1: both buffer lengths asked, as fs_main (see build_shader_source's end).
+    fs += "\n    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n        discard;\n    }";
+  }
   fs += source.substr(fsAt + fsHead.size(), markerAt - (fsAt + fsHead.size()));
   fs += "\n    return;";
   for (int i = 0; i < depth; ++i) {
@@ -4336,8 +4340,14 @@ std::string build_shader_source(const ShaderConfig& config) noexcept {
                             // The map is orthographic: an actor's caster[0] holds its height weight in column 3
                             // (the decal reads it), so w is pinned to 1 rather than taken from the matrix.
                             "\n    pos.w = 1.0;"
+                            "{}"
                             "\n    return pos;\n}}",
-                            shadowPos);
+                            shadowPos,
+                            // Quest 1: both buffer lengths asked, as vs_main (see build_shader_source's end).
+                            gfx::g_vertexFetchTexture ? ""
+                                                      : "\n    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {"
+                                                        "\n        pos = vec4f(0.0);"
+                                                        "\n    }");
   }
   if (config.mapBatch) {
     // The ordered map stream interleaves fills and line quads. Expand endpoints
@@ -5902,18 +5912,17 @@ fn fs_main(in: VertexOutput{9}) -> @location(0) vec4f {{{6}{5}
                         "\n    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n"
                         "        out.pos = vec4f(0.0);\n"
                         "    }");
-    // The driver builds that table per stage and keeps only the last stage's: a fragment stage that
-    // reads abuf (range fog, the room lights) left a table covering abuf alone, and the draw wrote
-    // past it for the second bound buffer (a crash on entering a room with such a draw). Such a
-    // fragment stage asks both lengths too, so its table covers both.
+    // The driver builds that table per stage and keeps only the last stage's, so a stage that reads
+    // one buffer (range fog, the room lights, a shadow caster's positions) left a table covering that
+    // one alone, and the draw wrote past it for the second bound buffer (a crash on entering a room
+    // with such a draw). Every entry point asks both lengths, whatever it reads: vs_main above,
+    // fs_main here, vs_shadow where it is built, and add_cut_caster's vs_shadow_cut (vs_main's body)
+    // and fs_shadow.
     constexpr std::string_view fsTail = "    return prev;\n}";
-    const size_t fsStart = find_anchor(shaderSource, "fn fs_main(");
-    const size_t fsEnd = find_anchor(shaderSource, fsTail, true);
-    if (fsEnd > fsStart && shaderSource.find("abuf", fsStart) < fsEnd) {
-      shaderSource.insert(fsEnd, "    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n"
-                                 "        prev = vec4f(0.0);\n"
-                                 "    }\n");
-    }
+    shaderSource.insert(find_anchor(shaderSource, fsTail, true),
+                        "    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n"
+                        "        prev = vec4f(0.0);\n"
+                        "    }\n");
   }
   add_cut_caster(shaderSource, config);
   if (config.drawId) {
