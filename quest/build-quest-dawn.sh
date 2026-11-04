@@ -6,7 +6,8 @@
 # AURORA_DAWN_PACKAGE_URL (gradle -PquestDawnPackage=<package>).
 #
 # Usage: quest/build-quest-dawn.sh <work directory>
-# Needs ANDROID_HOME with NDK 29.0.14206865, git, python3, cmake 3.25+ and ninja 1.11+ on PATH.
+# Needs ANDROID_HOME with NDK 29.0.14206865, git, python3 and cmake 3.25+ on PATH, and ninja 1.11+
+# (NINJA, else the one on PATH; the SDK's CMake ships an older one, which Dawn's C++ modules refuse).
 # Prints nothing but progress; the package is <work directory>/dawn-android-aarch64-primedgun.tar.gz.
 set -euo pipefail
 
@@ -28,6 +29,13 @@ ndk="$ANDROID_HOME/ndk/$ndk_version"
 toolchain="$ndk/build/cmake/android.toolchain.cmake"
 [ -f "$toolchain" ] || { echo "NDK $ndk_version not found under $ANDROID_HOME" >&2; exit 1; }
 
+ninja="${NINJA:-$(command -v ninja)}"
+ninja_version=$("$ninja" --version)
+if [ "$(printf '%s\n1.11\n' "$ninja_version" | sort -V | head -1)" != 1.11 ]; then
+  echo "Dawn needs Ninja 1.11 or newer; $ninja is $ninja_version (set NINJA)" >&2
+  exit 1
+fi
+
 archive="$work/dawn-${revision:0:12}.tar.gz"
 if [ ! -f "$archive" ]; then
   echo "Downloading Dawn $revision"
@@ -45,7 +53,7 @@ build="$work/b"
 install="$work/p"
 # The flags go before -C, as in encounter's release workflow: dawn-ci.cmake branches on
 # CMAKE_SYSTEM_NAME. No protobuf: only the IR binary format needs it.
-cmake -S "$source" -B "$build" -G Ninja \
+cmake -S "$source" -B "$build" -G Ninja "-DCMAKE_MAKE_PROGRAM=$ninja" \
   "-DCMAKE_TOOLCHAIN_FILE=$toolchain" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_SYSTEM_NAME=Android \

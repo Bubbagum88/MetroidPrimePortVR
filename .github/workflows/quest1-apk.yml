@@ -53,7 +53,7 @@ jobs:
         if: steps.dawn-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y ninja-build > /dev/null
-          bash quest/build-quest-dawn.sh build/qd
+          NINJA=/usr/bin/ninja bash quest/build-quest-dawn.sh build/qd
       # Signed with the committed CI key, so every build installs over the last.
       - name: Build
         env:
