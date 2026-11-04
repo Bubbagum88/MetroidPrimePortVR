@@ -873,7 +873,8 @@ void initialize() {
       return entry;
     };
     // Vertex data in group 0; storage data alone in group 3 (see the abuf declaration in shader.cpp).
-    const std::array layoutEntries{makeEntry(0, wgpu::ShaderStage::Vertex)};
+    // Visible to the fragment stage too: a fragment stage that reads abuf asks both lengths (shader.cpp).
+    const std::array layoutEntries{makeEntry(0, wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment)};
     const wgpu::BindGroupLayoutDescriptor layoutDesc{
         .label = "Static bind group layout",
         .entryCount = layoutEntries.size(),

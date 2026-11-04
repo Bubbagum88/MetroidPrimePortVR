@@ -5902,6 +5902,18 @@ fn fs_main(in: VertexOutput{9}) -> @location(0) vec4f {{{6}{5}
                         "\n    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n"
                         "        out.pos = vec4f(0.0);\n"
                         "    }");
+    // The driver builds that table per stage and keeps only the last stage's: a fragment stage that
+    // reads abuf (range fog, the room lights) left a table covering abuf alone, and the draw wrote
+    // past it for the second bound buffer (a crash on entering a room with such a draw). Such a
+    // fragment stage asks both lengths too, so its table covers both.
+    constexpr std::string_view fsTail = "    return prev;\n}";
+    const size_t fsStart = find_anchor(shaderSource, "fn fs_main(");
+    const size_t fsEnd = find_anchor(shaderSource, fsTail, true);
+    if (fsEnd > fsStart && shaderSource.find("abuf", fsStart) < fsEnd) {
+      shaderSource.insert(fsEnd, "    if (arrayLength(&vbuf) == 0u || arrayLength(&abuf) == 0u) {\n"
+                                 "        prev = vec4f(0.0);\n"
+                                 "    }\n");
+    }
   }
   add_cut_caster(shaderSource, config);
   if (config.drawId) {
