@@ -4,6 +4,7 @@
 package org.primedgun.v2.launcher
 
 import android.app.ActivityManager
+import android.app.ActivityOptions
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.util.Log
+import android.view.Display
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -314,7 +316,16 @@ class LauncherActivity : AppCompatActivity() {
         reapplyCannonPack()
         QuestStorage.clearLastError(this)
         try {
-            startActivity(Intent(this, PrimedGunVrActivity::class.java))
+            // The launcher is a 2D panel on its own virtual display. Started from it plainly, the
+            // game joins the launcher's task on that display, and the Quest 1's runtime never gives
+            // it the headset (logcat: the game's window focused on the panel's display, not #0;
+            // the OpenXR session stops at SYNCHRONIZED). A new task on the main display, as
+            // `adb shell am start` does, makes it the immersive app.
+            val options = ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY)
+            startActivity(
+                Intent(this, PrimedGunVrActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                options.toBundle(),
+            )
         } catch (e: ActivityNotFoundException) {
             Log.e(TAG, "Cannot start the game activity", e)
             Toast.makeText(this, R.string.primedgun_launch_failed, Toast.LENGTH_LONG).show()
