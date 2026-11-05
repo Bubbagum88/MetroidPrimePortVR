@@ -219,11 +219,6 @@ open class PrimedGunVrActivity : SDLActivity() {
         private val TEST_ENVIRONMENT =
             listOf("MP_BOOT_WORLD", "MP_FAST_BOOT", "MP_VR_LOG", "MP_LOAD_STATE", "MP_FRAME_STATS", "MP_SORT_OPAQUE", "MP_MINIMAP_BATCH", "MP_MAP_SCREEN_BATCH", "MP_SURFACE_CULL", "MP_MONO_SHADOW", "MP_GEOMETRY_CACHE", "MP_FOVEATION", "MP_FDM_DEVICE", "MP_FOVEATION_LAYERS", "MP_NATIVE_VERTICES",
                 // Dawn toggles for driver debugging (aurora gpu.cpp), e.g. MP_DAWN_DISABLE=skip_validation.
-                "MP_DAWN_ENABLE", "MP_DAWN_DISABLE",
-                // The GPU self-test (aurora gfx/selftest.cpp), run once 120 frames in: MP_GPU_SELFTEST=1.
-                "MP_GPU_SELFTEST",
-                // EFB copy diagnostics (aurora gfx/copy_diag.hpp): MP_COPY_DIAG=1 logs every kind of copy
-                // and reads its texels back; MP_EYE_COPIES=0 takes copies from the mono EFB only.
-                "MP_COPY_DIAG", "MP_EYE_COPIES")
+                "MP_DAWN_ENABLE", "MP_DAWN_DISABLE")
     }
 }

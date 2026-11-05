@@ -883,9 +883,6 @@ GXBindGroups build_bind_groups(const ShaderInfo& info) noexcept;
 // a sampled texture has per-eye stand-ins (gfx/stereo_shadow.hpp); zero when the
 // mono bind group applies to both eyes.
 std::array<gfx::BindGroupRef, 2> build_stereo_bind_groups(const ShaderInfo& info) noexcept;
-// MP_COPY_DIAG (gfx/copy_diag.hpp): logs once per kind of draw that samples an EFB copy whether
-// the eyes get their own copy of it.
-void diagnose_sampled_copies(const ShaderInfo& info, bool multiview) noexcept;
 // Multiview stereo replay (gfx/stereo_multiview.hpp): the texture bind group of a
 // multiview pipeline, every sampled texture as a 2D array view (an EFB copy taken
 // per eye as both its layers); zero when nothing is sampled.
