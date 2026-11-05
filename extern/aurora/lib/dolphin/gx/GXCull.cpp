@@ -3,6 +3,7 @@
 
 namespace {
 bool sCullMirrored = false;
+bool sCullTwoSided = false;
 GXCullMode sRequestedCullMode = GX_CULL_BACK;
 }
 
@@ -45,6 +46,9 @@ void GXSetCullMode(GXCullMode mode) {
     if (mode == GX_CULL_FRONT) mode = GX_CULL_BACK;
     else if (mode == GX_CULL_BACK) mode = GX_CULL_FRONT;
   }
+  if (sCullTwoSided && (mode == GX_CULL_FRONT || mode == GX_CULL_BACK)) {
+    mode = GX_CULL_NONE;
+  }
   // Swap front/back to match hardware convention
   GXCullMode hwMode;
   switch (mode) {
@@ -66,6 +70,15 @@ u8 AuroraSetCullMirrored(u8 mirrored) {
   const bool previous = sCullMirrored;
   if (previous != (mirrored != GX_FALSE)) {
     sCullMirrored = mirrored != GX_FALSE;
+    GXSetCullMode(sRequestedCullMode);
+  }
+  return previous ? GX_TRUE : GX_FALSE;
+}
+
+u8 AuroraSetCullTwoSided(u8 twoSided) {
+  const bool previous = sCullTwoSided;
+  if (previous != (twoSided != GX_FALSE)) {
+    sCullTwoSided = twoSided != GX_FALSE;
     GXSetCullMode(sRequestedCullMode);
   }
   return previous ? GX_TRUE : GX_FALSE;

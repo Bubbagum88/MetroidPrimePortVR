@@ -907,6 +907,7 @@ void CPlayerGun::Render(const CStateManager& mgr, const CVector3f& pos,
   {
 #ifdef TARGET_PC
   const PortVr::ModelMirrorScope mirrorScope;
+  const PortVr::ModelTwoSidedScope twoSidedScope;
 #endif
   x73c_gunMotion->Draw(mgr, modelWorldXf);
 

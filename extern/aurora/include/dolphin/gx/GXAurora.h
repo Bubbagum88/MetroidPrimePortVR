@@ -10,6 +10,9 @@ extern "C" {
 // Invert front/back culling while drawing reflected model geometry. Returns
 // the previous setting so nested model-draw scopes can restore it.
 u8 AuroraSetCullMirrored(u8 mirrored);
+// Draw front and back faces while set (a front or back cull mode draws both; GX_CULL_ALL still
+// draws nothing). Returns the previous setting so nested scopes can restore it.
+u8 AuroraSetCullTwoSided(u8 twoSided);
 
 //
 // Subcommands for GX_AURORA.
